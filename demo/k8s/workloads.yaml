@@ -1,0 +1,52 @@
+# Three typical request mistakes, for `costopt k8s` to find (namespace costopt-demo).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: costopt-demo
+---
+# Over-requested: asks for 500m / 512Mi per replica, idles at a few millicores.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: reports, namespace: costopt-demo}
+spec:
+  replicas: 3
+  selector: {matchLabels: {app: reports}}
+  template:
+    metadata: {labels: {app: reports}}
+    spec:
+      containers:
+        - name: reports
+          image: busybox:1.37
+          command: ["sh", "-c", "while true; do sleep 5; done"]
+          resources: {requests: {cpu: 500m, memory: 512Mi}}
+---
+# Under-requested: asks for 50m, burns ~250m (capped by its limit), so the node is overcommitted.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: worker, namespace: costopt-demo}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: worker}}
+  template:
+    metadata: {labels: {app: worker}}
+    spec:
+      containers:
+        - name: worker
+          image: busybox:1.37
+          command: ["sh", "-c", "while true; do :; done"]
+          resources: {requests: {cpu: 50m, memory: 16Mi}, limits: {cpu: 250m, memory: 64Mi}}
+---
+# No requests at all: BestEffort.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cache, namespace: costopt-demo}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: cache}}
+  template:
+    metadata: {labels: {app: cache}}
+    spec:
+      containers:
+        - name: cache
+          image: busybox:1.37
+          command: ["sh", "-c", "while true; do sleep 5; done"]

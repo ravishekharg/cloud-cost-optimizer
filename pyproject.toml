@@ -1,0 +1,19 @@
+[project]
+name = "costopt"
+version = "0.1.0"
+description = "Find AWS and Kubernetes waste, price it, and apply the safe fixes"
+requires-python = ">=3.11"
+dependencies = ["boto3>=1.35", "requests>=2.32"]
+
+[project.optional-dependencies]
+dev = ["moto[ec2,elbv2,cloudwatch,sts,s3,sns,sqs]==5.2.4", "pytest==8.3.4"]
+
+[project.scripts]
+costopt = "costopt.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["costopt"]

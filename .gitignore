@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+demo/out/
+costopt-audit.jsonl
+.terraform/
+*.tfstate*
+.terraform.lock.hcl
+deploy/terraform/build/

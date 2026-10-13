@@ -1,0 +1,64 @@
+# Unit tests against mocked AWS (moto), the scan -> fix -> rescan demo against a moto server, and
+# Terraform checks for the scheduled-scan deployment.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q tests
+
+  demo:
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      moto:
+        image: motoserver/moto:5.2.4
+        ports: ["5055:5000"]
+        env:
+          MOTO_EC2_LOAD_DEFAULT_AMIS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: scan, fix, rescan (fails if fix doesn't reduce the findings)
+        run: bash demo/run.sh
+      - name: report in the job summary
+        run: cat demo/out/report.md >> "$GITHUB_STEP_SUMMARY"
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.6
+      - name: fmt and validate
+        run: |
+          terraform -chdir=deploy/terraform fmt -recursive -check
+          for d in deploy/terraform deploy/terraform/member-role; do
+            terraform -chdir=$d init -backend=false -input=false && terraform -chdir=$d validate
+          done
+      - name: checkov
+        run: |
+          pip install checkov==3.3.28
+          checkov -d deploy/terraform --framework terraform --quiet --compact

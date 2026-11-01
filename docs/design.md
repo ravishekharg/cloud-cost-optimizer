@@ -61,9 +61,22 @@ and Usage Report in Athena.
 | Findings from another account refused | Running with the wrong credentials |
 | Audit log (JSON lines) | "Who deleted my volume?" |
 
+## Commitments (`costopt commit`)
+Waste removal comes first: commit only to what is left after rightsizing, or you lock in the waste for 1-3 years.
+
+- **Model.** A plan with discount `d` and hourly commitment `c` covers on-demand spend up to `L = c / (1 - d)`
+  per hour. Cost over the history is `Σ [L(1 - d) + max(0, spend_h - L)]`.
+- **Optimum.** That is convex and piecewise linear in `L`, with slope `H(1 - d) - #{spend_h > L}`. The minimum is
+  where the share of hours above `L` drops to `1 - d`: cover the `d`-quantile of hourly spend. The code picks
+  the sorted value at index `ceil(H·d) - 1`, and a test checks it against brute force over every breakpoint.
+- **Inputs.** Cost Explorer hourly granularity (14 days kept), filtered to on-demand EC2, Fargate and Lambda, so
+  spend already covered by existing plans isn't counted twice. Or a CSV from the CUR or an export, for a longer
+  window. Use at least a month that includes the quiet periods.
+- **What it doesn't decide.** Term and payment option (pass the matching `--discount`), Compute vs EC2 Instance
+  plans (the instance plan has a bigger discount but is tied to a family and region), and growth. The report
+  shows the effect of a 20% drop so a risk-averse team can buy in steps.
+
 ## Not covered yet, and how they'd fit
-- **Commitments**: Savings Plans / RI coverage and utilisation (Cost Explorer API) - usually the
-  biggest single lever after rightsizing.
 - **S3**: storage class analysis, lifecycle to Intelligent-Tiering / Glacier, incomplete multipart uploads.
 - **RDS**: idle instances (connections), oversized instances, old manual snapshots.
 - **Data transfer**: cross-AZ traffic, NAT data processing vs gateway endpoints.

@@ -1,12 +1,13 @@
 """costopt aws   - scan accounts/regions for waste
 costopt k8s   - rightsize Kubernetes requests from Prometheus
 costopt fix   - apply the safe fixes from a JSON findings file (dry run unless --apply)
+costopt commit - how much Savings Plan commitment to buy, from hourly on-demand spend
 """
 import argparse
 import json
 import sys
 
-from . import aws, k8s, remediate, report
+from . import aws, commit, k8s, remediate, report
 
 
 def emit(text, out):
@@ -53,7 +54,27 @@ def main(argv=None):
     f.add_argument("--max-actions", type=int, default=20)
     f.add_argument("--audit-log", default="costopt-audit.jsonl")
 
+    c = sub.add_parser("commit", help="optimal Savings Plan commitment from hourly spend")
+    src = c.add_mutually_exclusive_group(required=True)
+    src.add_argument("--usage", help="CSV with an hourly 'spend' column, or 'sample' for a generated month")
+    src.add_argument("--from-cost-explorer", action="store_true", help="hourly compute spend from Cost Explorer")
+    c.add_argument("--days", type=int, default=14)
+    c.add_argument("--discount", type=float, default=commit.DEFAULT_DISCOUNT,
+                   help="plan discount vs on-demand, e.g. 0.28 (check yours for term and payment option)")
+    c.add_argument("--drop", type=float, default=0.2, help="also show the result if usage falls by this share")
+    c.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    c.add_argument("--out")
+
     args = p.parse_args(argv)
+    if args.cmd == "commit":
+        if args.from_cost_explorer:
+            import boto3
+            spend = commit.from_cost_explorer(boto3.Session(), args.days)
+        else:
+            spend = commit.sample_series() if args.usage == "sample" else commit.load_csv(args.usage)
+        r = commit.recommend(spend, args.discount, args.drop)
+        emit(commit.markdown(r) if args.format == "markdown" else json.dumps(r, indent=2) + "\n", args.out)
+        return 0
     if args.cmd == "aws":
         errors = []
         cfg = aws.Config(required_tags=[t for t in args.required_tags.split(",") if t], min_age_days=args.min_age_days,

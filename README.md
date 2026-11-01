@@ -8,6 +8,7 @@ costopt aws --regions us-east-1,eu-west-1 --format markdown --out report.md   # 
 costopt aws --format json --out findings.json && costopt fix findings.json     # plan (dry run)
 costopt fix findings.json --apply                                              # snapshot-first, re-checked, audited
 costopt k8s --prometheus http://prometheus:9090 --window 7d                    # request rightsizing
+costopt commit --from-cost-explorer --discount 0.28                            # Savings Plan size
 ```
 
 It's a personal project rebuilding, in the open, the kind of tooling behind the resource
@@ -37,6 +38,23 @@ Full report: [`docs/sample-k8s-report.md`](docs/sample-k8s-report.md).
 | `worker`: requests 50m, CPU-throttled by its limit in 100% of periods | flagged: usage understates demand, raise the limit; CPU request never cut |
 | `cache`: no requests | flagged BestEffort, suggested requests from usage |
 
+**Savings Plans: how much to commit** (`costopt commit`; the sample is a generated month of hourly compute spend
+with a $14/h base, weekday daytime peaks and a nightly batch; a real history comes from a CSV or straight from Cost
+Explorer with `--from-cost-explorer`). At a 28% plan discount:
+
+| Commitment | $ per hour | Saving / month | Utilisation | Coverage |
+|---|---|---|---|---|
+| **optimal: cover the 28th percentile of hourly spend** | $10.10 | **$2,734** (22.2%) | 98.7% | 82.1% |
+| commit at the median | $10.87 | $2,640 | 96.0% | 85.9% |
+| commit at the minimum | $8.51 | $2,416 | 100% | 70.1% |
+| commit at the average (a common rule of thumb) | $12.14 | $2,290 | 90.6% | 90.6% |
+
+Why the quantile: a commitment covers on-demand spend up to L = c / (1 − d) each hour and is paid whether used or
+not, so total cost is convex in L, and the minimum is where the share of hours above L equals 1 − d (the
+newsvendor problem). Committing at the average buys commitment the night hours can't use. The report also shows
+what the commitment does if usage then falls 20% (still $1,710/month saved). Property-tested against brute force on
+random histories.
+
 ## What it checks
 
 | Check | Finds | Fix |
@@ -61,7 +79,7 @@ to an audit log. More in [`docs/design.md`](docs/design.md).
 ## Run it
 ```bash
 pip install -e ".[dev]"
-python -m pytest -q tests                 # 40 tests, AWS mocked with moto
+python -m pytest -q tests                 # 87 tests, AWS mocked with moto
 
 # The AWS demo (moto server, nothing real is touched)
 docker run -d --name moto -p 5055:5000 -e MOTO_EC2_LOAD_DEFAULT_AMIS=false motoserver/moto:5.2.4
@@ -88,6 +106,7 @@ CloudWatch history, and the defaults' age guards left on.
 
 ## Limits
 Prices are a static us-east-1 table with region multipliers (estimates for prioritising, not a
-bill). No memory data for EC2 without the CloudWatch agent. Savings Plans / Reserved Instance
-coverage, S3 storage classes, RDS and data transfer are not covered yet: see
+bill). No memory data for EC2 without the CloudWatch agent. `costopt commit` sizes new commitments
+but doesn't analyse existing ones (utilisation of plans you already own). S3 storage classes, RDS and data
+transfer are not covered yet: see
 [`docs/design.md`](docs/design.md).

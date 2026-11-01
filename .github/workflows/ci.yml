@@ -44,6 +44,8 @@ jobs:
         run: bash demo/run.sh
       - name: report in the job summary
         run: cat demo/out/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Savings Plan commitment for a sample month of hourly spend
+        run: costopt commit --usage sample | tee -a "$GITHUB_STEP_SUMMARY"
 
   terraform:
     runs-on: ubuntu-latest
